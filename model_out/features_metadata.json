@@ -1,22 +1,41 @@
 {
   "feature_columns": [
-    "temperature",
-    "plankton_level",
-    "chlorophyll",
-    "salinity",
-    "wave_height",
-    "count"
+    "month_idx",
+    "lat_cell",
+    "lon_cell",
+    "chlor_a_mean",
+    "sst_mean",
+    "sharks_count_mean",
+    "years_with_obs",
+    "years_total",
+    "sharks_presence_rate",
+    "chl_norm",
+    "sst_norm",
+    "sh_norm",
+    "risk_score",
+    "__source_file_Nasa_Ocean\\merged_monthly_cells.csv"
   ],
   "numeric_columns": [
-    "temperature",
-    "plankton_level",
-    "chlorophyll",
-    "salinity",
-    "wave_height",
-    "count"
+    "month_idx",
+    "lat_cell",
+    "lon_cell",
+    "chlor_a_mean",
+    "sst_mean",
+    "sharks_count_mean",
+    "years_with_obs",
+    "years_total",
+    "sharks_presence_rate",
+    "chl_norm",
+    "sst_norm",
+    "sh_norm",
+    "risk_score"
   ],
-  "categorical_expanded_columns": [],
+  "categorical_expanded_columns": [
+    "__source_file_Nasa_Ocean\\merged_monthly_cells.csv"
+  ],
   "label_info": {
+    "source": "random",
+    "rule": "seeded binary",
     "conversion": "numeric > 0 -> 1"
   }
 }
