@@ -1,0 +1,22 @@
+{
+  "feature_columns": [
+    "temperature",
+    "plankton_level",
+    "chlorophyll",
+    "salinity",
+    "wave_height",
+    "count"
+  ],
+  "numeric_columns": [
+    "temperature",
+    "plankton_level",
+    "chlorophyll",
+    "salinity",
+    "wave_height",
+    "count"
+  ],
+  "categorical_expanded_columns": [],
+  "label_info": {
+    "conversion": "numeric > 0 -> 1"
+  }
+}
