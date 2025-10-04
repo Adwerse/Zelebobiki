@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { Deck, TileLayer, BitmapLayer, MapView } from 'deck.gl';
+import { Deck, TileLayer, BitmapLayer, MapView, HeatmapLayer } from 'deck.gl';
 import PopUp from '@/components/map/PopUp.vue'
 
 const deckContainer = ref(null);
@@ -34,13 +34,22 @@ const oceanBasemap = new TileLayer({
     });
   }
 });
+// здеся редагувати heatmap
+const layer = new HeatmapLayer({
+  id: 'HeatmapLayer',
+  data: 'https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/sf-bike-parking.json',
 
+  aggregation: 'SUM',
+  getPosition: d => d.COORDINATES,
+  getWeight: d => d.SPACES,
+  radiusPixels: 25
+});
 deck.value = new Deck({
   parent: deckContainer.value,
   initialViewState: INITIAL_VIEW_STATE,
   controller: true,
   views: [new MapView({repeat: true})],
-  layers: [oceanBasemap],
+  layers: [oceanBasemap, layer],
   onClick: info => {
     popUp.value.showMenu();
     coords.value = {
