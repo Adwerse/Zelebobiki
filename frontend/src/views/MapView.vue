@@ -1,7 +1,6 @@
 <script setup>
-import { ref } from 'vue';
-import { Deck, TileLayer, BitmapLayer, MapView } from 'deck.gl';
-import PopUp from '@/components/map/PopUp.vue'
+import { Deck, TileLayer, BitmapLayer, MapView, HeatmapLayer } from 'deck.gl';
+import { onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const deckContainer = ref(null);
 const coords = ref(null);
@@ -16,11 +15,17 @@ const INITIAL_VIEW_STATE = {
   bearing: 0
 };
 
+onMounted(() => {
+  document.body.classList.add('no-scroll')
+})
+onUnmounted(() => {
+  document.body.classList.remove('no-scroll')
+})
+
 const oceanBasemap = new TileLayer({
-  id: 'ocean-basemap',
   data: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
   minZoom: 0,
-  maxZoom: 13,
+  maxZoom: 10,
   tileSize: 256,
 
   renderSubLayers: props => {
@@ -35,12 +40,34 @@ const oceanBasemap = new TileLayer({
   }
 });
 
+const layers = ref([oceanBasemap])
+
+const loadHeatmap = async () => {
+  // const response = await axios.get("http://localhost/api/sharks/heatmap/");
+  const layer = new HeatmapLayer({
+    parent: deckContainer.value,
+    data: 'http://localhost/api/sharks/heatmap/',
+    aggregation: 'SUM',
+    getPosition: d => [d.lat, d.lon],
+    getWeight: d => d.weight,
+    radiusPixels: 25
+  });
+  layers.value = [oceanBasemap, layer];
+}
+
+loadHeatmap();
+
+watch(layers, (val) => {
+  console.log(val);
+  deck.value.setProps({ layers: val })
+})
+
 deck.value = new Deck({
   parent: deckContainer.value,
   initialViewState: INITIAL_VIEW_STATE,
   controller: true,
   views: [new MapView({repeat: true})],
-  layers: [oceanBasemap],
+  layers: layers.value,
   onClick: info => {
     popUp.value.showMenu();
     coords.value = {
@@ -49,11 +76,16 @@ deck.value = new Deck({
     };
   },
 });
+
+onBeforeUnmount(() => {
+  deck.value?.finalize();
+  deck.value = null;
+});
 </script>
 
 <template>
   <div>
     <div ref="deckContainer"></div>
-    <PopUp ref="popUp" :deck="deck" :coordinates="coords"/>
+<!--    <PopUp ref="popUp" :deck="deck" :coordinates="coords"/>-->
   </div>
 </template>
