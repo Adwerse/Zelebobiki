@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from "vue";
 import {Button} from "@/components/ui/button/index.js";
+import { MapPin } from "lucide-vue-next";
 
 const props = defineProps({
   deck: { type: Object, required: true },
@@ -45,7 +46,7 @@ defineExpose({
 </script>
 
 <template>
-  <div v-if="open" class="fixed size-5 bg-red-500 z-99 rounded-2xl" :style="`left: ${coordinates.x}px; top: ${coordinates.y}px`"></div>
+  <MapPin v-if="open" class="fixed size-5 z-99 rounded-2xl fill-white" :style="`left: ${coordinates.x}px; top: ${coordinates.y}px`"></MapPin>
 
   <div v-if="open" class="fixed z-99 p-5 w-50 rounded-lg bg-white" :style="`left: ${coordinates.x + 25}px; top: ${coordinates.y + 10}px`">
     <ul class="flex flex-col">
