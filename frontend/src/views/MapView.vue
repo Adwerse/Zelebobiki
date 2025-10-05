@@ -40,24 +40,33 @@ const oceanBasemap = new TileLayer({
   }
 });
 
-const layer = new HeatmapLayer({
-  id: 'HeatmapLayer',
-  data: 'sharks.json',
-  aggregation: 'SUM',
-  getPosition: d => [d.lon, d.lat],
-  radiusPixels: 25,
-  intensity: 2.0,
-  threshold: 0.02,                    // опускаем порог, чтобы одиночные точки проявлялись
-  colorRange: [
-    [0,   0,   0,   0],   // прозрачный фон
-    [0,  255, 255,  80],  // бирюза
-    [0,  200, 255, 120],
-    [0,  150, 255, 160],
-    [255, 255,  0, 200],  // жёлтый
-    [255, 128,  0, 230],  // оранжевый
-    [255,   0,  0, 255]   // красный (пик)
-  ],
-});
+const COLOR_RANGE = [
+  [255, 0, 0],
+  [255, 0, 0],
+  [255, 0, 0],
+  [255, 0, 0],
+  [255, 0, 0],
+  [255, 0, 0],
+];
+
+// const layer = new HeatmapLayer({
+//   id: 'HeatmapLayer',
+//   data: 'sharks.json',
+//   aggregation: 'SUM',
+//   getPosition: d => [d.lon, d.lat],
+//   radiusPixels: 25,
+//   intensity: 2.0,
+//   threshold: 0.02,                    // опускаем порог, чтобы одиночные точки проявлялись
+//   colorRange: [
+//     [0,   0,   0,   0],   // прозрачный фон
+//     [0,  255, 255,  80],  // бирюза
+//     [0,  200, 255, 120],
+//     [0,  150, 255, 160],
+//     [255, 255,  0, 200],  // жёлтый
+//     [255, 128,  0, 230],  // оранжевый
+//     [255,   0,  0, 255]   // красный (пик)
+//   ],
+// });
 
 const oceanBasemap2 = new TileLayer({
   id: 'ocean-basemap-2',
@@ -101,7 +110,30 @@ const secondLayer = new HeatmapLayer({
 
 });
 
-const layers = ref([oceanBasemap, secondLayer, layer, oceanBasemap2]);
+const layers = ref([oceanBasemap, secondLayer, oceanBasemap2]);
+
+fetch('sharks.json')
+  .then(response => response.json())
+  .then(data => {
+    // Тепер data містить масив об'єктів з координатами та числовими значеннями
+    const hexagonLayer = new HexagonLayer({
+      id: 'heatmap',
+      colorRange: COLOR_RANGE,
+      data, // тепер [{position: [lng, lat], value: N}, ...]
+      elevationRange: [0, 1000],
+      elevationScale: 250,
+      extruded: true,
+      getPosition: d => [d.lon, d.lat],   // беремо координати
+      getWeight: d => 10,      // числове значення
+      getColorWeight: d => 10,
+      getElevationWeight: d => 10,
+      elevationAggregation: 'SUM', // середнє для висоти
+      colorAggregation: 'SUM',     // середнє для кольору
+      coverage: 1,
+      radius: 100000
+    });
+    layers.value = [oceanBasemap, secondLayer, hexagonLayer, oceanBasemap2];
+  });
 
 watch(layers, (val) => {
   console.log(val);
