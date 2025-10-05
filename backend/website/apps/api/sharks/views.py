@@ -15,11 +15,41 @@ from apps.api.mixins import VersioningAPIViewMixin
 from apps.core.mixins import OceanGeoPointAPIViewMixin
 
 
-# Глобальные переменные для хранения модели и scaler
+# Глобальные переменные для хранения модели и scaler'ов
 _MODEL = None
-_SCALER = None
-_FEATURE_COLUMNS = None
-_NUMERIC_COLUMNS = None
+_INPUT_SCALER = None
+_OUTPUT_SCALER = None
+_MODEL_DIR = None
+
+# Константы, соответствующие обучающему скрипту в neura
+RECONSTRUCT_TARGETS = [
+    "chlor_a_mean",
+    "sst_mean",
+    "chl_norm",
+    "sst_suit",
+    "month_sin",
+    "month_cos",
+]
+LABEL_OUTPUT = "label"
+CLASS_THRESHOLD = 0.5
+
+
+def _resolve_model_dir() -> Path:
+    """Возвращает путь к директории с артефактами модели."""
+    candidates = [
+        settings.BASE_DIR / "model_out",
+        settings.BASE_DIR.parent / "model_out",
+        settings.BASE_DIR.parent.parent / "neura" / "model_out",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    joined = "\n - ".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        "Директория с моделью не найдена. Проверены пути:\n - " + joined
+    )
 
 
 def load_model_artifacts():
@@ -27,43 +57,40 @@ def load_model_artifacts():
     Загружает модель и scaler при старте приложения.
     Вызывается один раз при первом обращении к predict.
     """
-    global _MODEL, _SCALER, _FEATURE_COLUMNS, _NUMERIC_COLUMNS
+    global _MODEL, _INPUT_SCALER, _OUTPUT_SCALER, _MODEL_DIR
     
-    if _MODEL is not None:
+    if _MODEL is not None and _INPUT_SCALER is not None and _OUTPUT_SCALER is not None:
         return  # Уже загружено
     
     try:
         import tensorflow as tf
         
-        # Определяем пути к файлам модели
-        # Предполагаем, что model_out находится в корне проекта
-        base_dir = settings.BASE_DIR / "model_out"
-        model_path = base_dir / "final_model.keras"
-        scaler_path = base_dir / "scaler.joblib"
-        
-        # Загружаем модель Keras
+        _MODEL_DIR = _resolve_model_dir()
+
+        model_path = _MODEL_DIR / "final_model.keras"
+        input_scaler_path = _MODEL_DIR / "input_scaler.joblib"
+        output_scaler_path = _MODEL_DIR / "output_scaler.joblib"
+
         if not model_path.exists():
             raise FileNotFoundError(f"Модель не найдена: {model_path}")
-        
+        if not input_scaler_path.exists():
+            raise FileNotFoundError(f"Scaler координат не найден: {input_scaler_path}")
+        if not output_scaler_path.exists():
+            raise FileNotFoundError(f"Scaler реконструкции не найден: {output_scaler_path}")
+
         _MODEL = tf.keras.models.load_model(str(model_path))
+        _INPUT_SCALER = joblib.load(input_scaler_path)
+        _OUTPUT_SCALER = joblib.load(output_scaler_path)
+
         print(f"✓ Модель загружена из {model_path}")
-        
-        # Загружаем scaler и метаданные
-        if not scaler_path.exists():
-            raise FileNotFoundError(f"Scaler не найден: {scaler_path}")
-        
-        scaler_payload = joblib.load(scaler_path)
-        _SCALER = scaler_payload.get("scaler")
-        _FEATURE_COLUMNS = scaler_payload.get("feature_columns", [])
-        _NUMERIC_COLUMNS = scaler_payload.get("numeric_columns", [])
-        
-        print(f"✓ Scaler загружен из {scaler_path}")
-        print(f"✓ Количество признаков: {len(_FEATURE_COLUMNS)}")
+        print(f"✓ Scaler координат загружен из {input_scaler_path}")
+        print(f"✓ Scaler реконструируемых признаков загружен из {output_scaler_path}")
         
     except Exception as e:
         print(f"✗ Ошибка загрузки модели: {e}")
         _MODEL = None
-        _SCALER = None
+        _INPUT_SCALER = None
+        _OUTPUT_SCALER = None
         raise
 
 
@@ -77,60 +104,52 @@ def predict_shark_risk(latitude: float, longitude: float):
     
     Returns:
         dict: Словарь с предсказаниями:
-            - temperature: Температура воды (float)
-            - plankton_lvl: Уровень планктона (float)
+            - chlor_a_mean, sst_mean, chl_norm, sst_suit, month_sin, month_cos
             - shark_probability: Вероятность присутствия акул (float, 0.0-1.0)
+            - shark_present: Бинарный вывод (bool)
     
     Raises:
         Exception: Если модель не загружена или произошла ошибка инференса
     """
-    global _MODEL, _SCALER, _FEATURE_COLUMNS, _NUMERIC_COLUMNS
+    global _MODEL, _INPUT_SCALER, _OUTPUT_SCALER
     
     # Проверяем, что модель загружена
-    if _MODEL is None or _SCALER is None:
+    if _MODEL is None or _INPUT_SCALER is None or _OUTPUT_SCALER is None:
         load_model_artifacts()
     
     if _MODEL is None:
         raise Exception("Модель не загружена")
     
     try:
-        # Создаем входной вектор признаков
-        # Используем latitude и longitude, остальные признаки заполняем нулями
-        input_data = {col: 0.0 for col in _FEATURE_COLUMNS}
-        
-        # Заполняем доступные признаки
-        if "lat_cell" in input_data:
-            input_data["lat_cell"] = latitude
-        if "lon_cell" in input_data:
-            input_data["lon_cell"] = longitude
-        
-        # Преобразуем в DataFrame для корректной работы scaler
-        input_df = pd.DataFrame([input_data])
-        
-        # Масштабируем числовые признаки
-        if _SCALER is not None and _NUMERIC_COLUMNS:
-            numeric_cols_present = [col for col in _NUMERIC_COLUMNS if col in input_df.columns]
-            if numeric_cols_present:
-                input_df[numeric_cols_present] = _SCALER.transform(input_df[numeric_cols_present])
-        
-        # Приводим к нужному порядку столбцов и типу данных
-        input_array = input_df[_FEATURE_COLUMNS].astype(np.float32).to_numpy()
-        
-        # Выполняем предсказание
-        prediction = _MODEL.predict(input_array, verbose=0)[0][0]
-        shark_probability = float(prediction)
-        
-        # Генерируем синтетические выходные данные для temperature и plankton_lvl
-        # Эти значения можно заменить на реальные предсказания модели, если она их возвращает
-        # Для демонстрации используем простые формулы на основе координат
-        temperature = 15.0 + (latitude / 90.0) * 10.0 + np.random.uniform(-2, 2)
-        plankton_lvl = 1.5 + (longitude / 180.0) * 2.0 + np.random.uniform(-0.5, 0.5)
-        
-        return {
-            "temperature": float(temperature),
-            "plankton_lvl": float(plankton_lvl),
-            "shark_probability": shark_probability
+        coords = np.array([[latitude, longitude]], dtype=np.float32)
+        coords_scaled = _INPUT_SCALER.transform(coords)
+
+        raw_predictions = _MODEL.predict(coords_scaled, verbose=0)
+
+        if isinstance(raw_predictions, dict):
+            label_probs = raw_predictions[LABEL_OUTPUT].ravel()
+            recon_scaled = np.column_stack(
+                [raw_predictions[target].ravel() for target in RECONSTRUCT_TARGETS]
+            )
+        else:
+            # Если модель вернула список, предполагаем порядок как в RECONSTRUCT_TARGETS + label
+            label_probs = raw_predictions[-1].ravel()
+            recon_scaled = np.column_stack(
+                [pred.ravel() for pred in raw_predictions[:-1]]
+            )
+
+        reconstructed = _OUTPUT_SCALER.inverse_transform(recon_scaled)[0]
+        shark_probability = float(label_probs[0])
+        shark_present = bool(shark_probability >= CLASS_THRESHOLD)
+
+        response_payload = {
+            target: float(value)
+            for target, value in zip(RECONSTRUCT_TARGETS, reconstructed)
         }
+        response_payload["shark_probability"] = shark_probability
+        response_payload["shark_present"] = shark_present
+
+        return response_payload
         
     except Exception as e:
         print(f"✗ Ошибка инференса: {e}")
@@ -151,9 +170,14 @@ class SharkPredictionAPIView(OceanGeoPointAPIViewMixin, VersioningAPIViewMixin, 
     
     Пример ответа:
     {
-        "temperature": 18.5,
-        "plankton_lvl": 2.3,
-        "shark_probability": 0.75
+        "chlor_a_mean": 0.32,
+        "sst_mean": 24.1,
+        "chl_norm": 0.01,
+        "sst_suit": 0.82,
+        "month_sin": 0.50,
+        "month_cos": 0.87,
+        "shark_probability": 0.75,
+        "shark_present": 1
     }
     
     Пример curl-запроса (Linux/Mac):
