@@ -1,5 +1,5 @@
 <script setup>
-import { Deck, TileLayer, BitmapLayer, MapView, HeatmapLayer } from 'deck.gl';
+import { Deck, TileLayer, BitmapLayer, MapView, HeatmapLayer, HexagonLayer } from 'deck.gl'
 import { onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const deckContainer = ref(null);
@@ -25,7 +25,7 @@ onUnmounted(() => {
 const oceanBasemap = new TileLayer({
   data: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
   minZoom: 0,
-  maxZoom: 10,
+  maxZoom: 5,
   tileSize: 256,
 
   renderSubLayers: props => {
@@ -40,22 +40,68 @@ const oceanBasemap = new TileLayer({
   }
 });
 
-const layers = ref([oceanBasemap])
+const layer = new HeatmapLayer({
+  id: 'HeatmapLayer',
+  data: 'sharks.json',
+  aggregation: 'SUM',
+  getPosition: d => [d.lon, d.lat],
+  radiusPixels: 25,
+  intensity: 2.0,
+  threshold: 0.02,                    // опускаем порог, чтобы одиночные точки проявлялись
+  colorRange: [
+    [0,   0,   0,   0],   // прозрачный фон
+    [0,  255, 255,  80],  // бирюза
+    [0,  200, 255, 120],
+    [0,  150, 255, 160],
+    [255, 255,  0, 200],  // жёлтый
+    [255, 128,  0, 230],  // оранжевый
+    [255,   0,  0, 255]   // красный (пик)
+  ],
+});
 
-const loadHeatmap = async () => {
-  // const response = await axios.get("http://localhost/api/sharks/heatmap/");
-  const layer = new HeatmapLayer({
-    parent: deckContainer.value,
-    data: 'http://localhost/api/sharks/heatmap/',
-    aggregation: 'SUM',
-    getPosition: d => [d.lat, d.lon],
-    getWeight: d => d.weight,
-    radiusPixels: 25
-  });
-  layers.value = [oceanBasemap, layer];
-}
+const oceanBasemap2 = new TileLayer({
+  id: 'ocean-basemap-2',
+  data: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
+  minZoom: 0,
+  // maxZoom: 10,
+  maxZoom: 5,
+  tileSize: 256,
 
-loadHeatmap();
+  renderSubLayers: props => {
+    const {
+      bbox: {west, south, east, north}
+    } = props.tile;
+    return new BitmapLayer(props, {
+      data: null,
+      image: props.data,
+      bounds: [west, south, east, north]
+    });
+  }
+});
+
+
+const secondLayer = new HeatmapLayer({
+  id: 'SecondHeatmapLayer',
+  data: 'output.json',
+  aggregation: 'SUM',
+  getPosition: d => [d.lon_cell, d.lat_cell],
+  getWeight: d => d.chlor_a_mean,
+  radiusPixels: 45,
+  intensity: 1,
+  threshold: 0.11,
+  weightsTextureSize: 512,
+  colorRange: [
+    [200, 220, 200],
+    [175, 210, 165],
+    [140, 190, 130],
+    [100, 160, 90],
+    [40, 140, 60],
+    [0, 90, 30],
+  ],
+
+});
+
+const layers = ref([oceanBasemap, secondLayer, layer, oceanBasemap2]);
 
 watch(layers, (val) => {
   console.log(val);

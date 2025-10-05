@@ -42,7 +42,7 @@ const teammates = ref([
     name: 'Rodion Omelich',
     role: 'AI / Dataset Engineer',
     photo:
-      'https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?q=80&w=800&auto=format&fit=crop',
+      'https://i.ibb.co/F4rzyTmc/image.png',
     links: [
       { label: 'GitHub', href: 'https://github.com/RodionOm' },
       { label: 'LinkedIn', href: 'https://www.linkedin.com/in/rodion-omelich-bba55b378/' },
